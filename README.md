@@ -1,133 +1,205 @@
-# Stock Car KPIs Analytics 🏎️📊
+<div align="center">
 
-Pipeline de Engenharia de Dados aplicada ao motorsport brasileiro.
-Coleta, armazena e analisa resultados da **Stock Car Brasil 2024** para gerar
-métricas de performance que não estão disponíveis de forma direta nos dados brutos oficiais.
+# 🏎️ Stock Car KPIs Analytics
+
+**Pipeline de Engenharia de Dados aplicada ao motorsport brasileiro**
+
+![Python](https://img.shields.io/badge/Python-3.10-3776AB?style=flat-square&logo=python&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)
+![Pandas](https://img.shields.io/badge/Pandas-2.2-150458?style=flat-square&logo=pandas&logoColor=white)
+![Matplotlib](https://img.shields.io/badge/Matplotlib-3.8-white?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+
+*Transformando dados brutos da Stock Car Brasil em inteligência competitiva real*
+
+</div>
 
 ---
 
-## O que este projeto faz
+## O Problema
 
-O site oficial da Stock Car publica resultados brutos — posições, tempos e pit stops corrida a corrida.
-Este projeto vai além:
+O site oficial da Stock Car publica tabelas de resultados corrida a corrida — posições finais, pit stops, grid de largada. Dados brutos.
 
-| Análise | O que revela |
+**O que nenhum analista da equipe consegue ver facilmente nesses dados:**
+- Qual piloto é *estatisticamente* mais consistente ao longo da temporada?
+- Em quais voltas as equipes que **subiram de posição** fizeram o pit — e qual a janela ideal?
+- Qual equipe está aproveitando *melhor* o seu equipamento, independente de vitórias?
+- Quem está evoluindo no campeonato e quem está estagnado?
+
+Este projeto automatiza a coleta, estrutura em banco relacional e responde essas perguntas com SQL e visualizações.
+
+---
+
+## Arquitetura
+
+```
+┌─────────────────────┐      ┌──────────────────────┐      ┌─────────────────────┐
+│   stockcar.com.br   │─────▶│  scraper/scraper.py  │─────▶│  PostgreSQL (Docker)│
+│   (Selenium)        │      │  ETL / load_db.py    │      │  3 tabelas relacionadas│
+└─────────────────────┘      └──────────────────────┘      └──────────┬──────────┘
+                                                                        │
+                                                            ┌───────────▼──────────┐
+                                                            │  dashboard/app.py    │
+                                                            │  4 análises + charts │
+                                                            └──────────────────────┘
+```
+
+**Schema do banco:**
+```
+corridas  (id, data, circuito, condicoes_pista, temporada)
+    │
+    ├──▶  resultados  (corrida_id, piloto, equipe, posicao, posicao_largada, voltas)
+    │
+    └──▶  pit_stops   (corrida_id, piloto, equipe, volta, duracao_s)
+```
+
+---
+
+## Stack
+
+| Ferramenta | Papel no projeto |
 |---|---|
-| **Score de Consistência** | Qual piloto entrega resultados previsíveis? Desvio padrão das posições ao longo da temporada. |
-| **Janela Ótima de Pit Stop** | Em quais voltas as equipes que subiram de posição fizeram a parada? Identifica o undercut e o overcut. |
-| **ROI Esportivo** | Quantos % dos pontos possíveis a equipe conquistou? Mede eficiência real, não só pódios. |
-| **Evolução por Etapa** | Como a performance de cada piloto evoluiu etapa a etapa? Tendência de desenvolvimento do carro. |
+| **Python 3.10** | Orquestração do pipeline ETL e visualizações |
+| **Selenium** | Web scraping do site oficial (com fallback automático) |
+| **PostgreSQL 15** | Armazenamento relacional com constraints e chaves estrangeiras |
+| **Docker Compose** | Banco isolado e reproduzível — roda igual em qualquer máquina |
+| **SQLAlchemy** | Conexão Python → PostgreSQL, inserção via DataFrame |
+| **Pandas** | Transformação dos dados e preparação para análise |
+| **Matplotlib + Seaborn** | Visualizações com tema escuro e paleta por equipe |
+| **Git** | Controle de versão |
 
 ---
 
-## Stack técnica
+## As 4 Análises
 
+### 1 — Score de Consistência por Piloto
+
+> *"Quem entrega resultado toda etapa, independente do circuito?"*
+
+Mede o **desvio padrão das posições finais** ao longo da temporada.
+Um piloto consistente tem STDDEV baixo — termina sempre na mesma região, independente do circuito ou condição de pista. Isso é crucial para estratégia de campeonato: equipes que precisam acumular pontos preferem consistência a picos isolados.
+
+```sql
+SELECT piloto, equipe,
+       ROUND(AVG(posicao)::numeric, 2)     AS media_posicao,
+       ROUND(STDDEV(posicao)::numeric, 2)  AS desvio_padrao
+FROM resultados
+WHERE temporada = 2024
+GROUP BY piloto, equipe
+ORDER BY desvio_padrao ASC;
 ```
-Python 3.10       Coleta (Selenium / web scraping) e orquestração do pipeline
-PostgreSQL 15     Armazenamento estruturado com relações e constraints
-Docker            Ambiente de banco isolado e reproduzível em qualquer máquina
-SQLAlchemy        ORM / conexão Python → PostgreSQL
-Pandas            Transformação e preparação dos DataFrames
-Matplotlib        Visualizações com tema escuro e paleta por equipe
-Seaborn           Gráficos estatísticos (scatter, tendência)
-Git               Controle de versão
+
+![Consistência](assets/1_consistencia_pilotos.png)
+
+---
+
+### 2 — Janela Ótima de Pit Stop
+
+> *"Em quais voltas os pilotos que subiram de posição fizeram a parada?"*
+
+Cruza a **volta do pit stop** com o **ganho de posições** resultante (posição de largada − posição final).
+Identifica estatisticamente a janela de undercut e overcut mais eficaz para cada circuito.
+
+```sql
+SELECT faixa_volta,
+       ROUND(AVG(posicao_largada - posicao)::numeric, 2) AS ganho_medio_posicoes
+FROM pit_stops p
+JOIN resultados r ON p.corrida_id = r.corrida_id AND p.piloto = r.piloto
+GROUP BY faixa_volta
+ORDER BY ganho_medio_posicoes DESC;
+```
+
+![Janela Pit](assets/2_janela_pit_stop.png)
+
+---
+
+### 3 — ROI Esportivo por Equipe
+
+> *"Qual equipe está aproveitando melhor o seu equipamento?"*
+
+**ROI Esportivo = (Pontos conquistados / Pontos máximos possíveis) × 100**
+
+Uma equipe que sempre termina em P4–P5 pode ter ROI coletivo maior do que uma equipe com um vencedor e um piloto na parte de trás do grid. Essa métrica mede eficiência real — não apenas brilho isolado.
+
+```sql
+WITH pontos AS (
+  SELECT equipe,
+         SUM(CASE posicao WHEN 1 THEN 25 WHEN 2 THEN 20 ... END) AS conquistados,
+         COUNT(*) * 25 AS maximo_possivel
+  FROM resultados WHERE temporada = 2024
+  GROUP BY equipe
+)
+SELECT equipe,
+       ROUND(conquistados::numeric / maximo_possivel * 100, 1) AS roi_pct
+FROM pontos ORDER BY roi_pct DESC;
+```
+
+![ROI Esportivo](assets/3_roi_esportivo_equipes.png)
+
+---
+
+### 4 — Evolução de Performance por Etapa
+
+> *"Quem melhorou no segundo semestre? Quem sofreu com mudanças de regulamento?"*
+
+Série temporal da posição final de cada piloto etapa a etapa.
+Revela tendências de desenvolvimento de carro, recuperações após problemas mecânicos e impacto de condições adversas (ex: etapa de pista molhada em Londrina).
+
+![Evolução](assets/4_evolucao_temporada.png)
+
+---
+
+## Como rodar
+
+### Pré-requisitos
+- Python 3.10+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado e aberto
+
+```bash
+# 1. Clonar
+git clone https://github.com/Cavalchi/StockCarKPIs.git
+cd StockCarKPIs
+
+# 2. Instalar dependências
+pip install -r requirements.txt
+
+# 3. Subir o banco (PostgreSQL no Docker)
+docker-compose up -d
+
+# 4. Executar o pipeline ETL
+python scraper/load_db.py
+
+# 5. Gerar os 4 gráficos
+python dashboard/app.py
+# → Salvo em ./output/
 ```
 
 ---
 
-## Estrutura do projeto
+## Estrutura
 
 ```
 StockCarKPIs/
 ├── scraper/
-│   ├── scraper.py          # Selenium: tenta coleta real do site oficial
-│   └── load_db.py          # ETL: cria schema, popula banco (8 etapas 2024)
+│   ├── scraper.py       # Selenium: coleta real do site oficial
+│   └── load_db.py       # ETL: schema + 8 etapas 2024 (80 resultados, 80 pit stops)
 ├── analysis/
-│   └── kpis.sql            # Todas as queries SQL das 4 análises + bônus Eurofarma
+│   └── kpis.sql         # SQL das 4 análises + bônus Eurofarma RC
 ├── dashboard/
-│   └── app.py              # Gera os 4 gráficos em ./output/
+│   └── app.py           # Geração dos 4 gráficos (matplotlib, seaborn)
+├── assets/              # Charts para o README
 ├── db/
-│   └── schema.sql          # Schema de referência (corridas → resultados → pit_stops)
-├── output/                 # Gráficos gerados (PNG, 150 DPI)
-├── docker-compose.yml      # PostgreSQL 15 em container
-└── requirements.txt        # Dependências Python
+│   └── schema.sql       # Schema de referência
+├── docker-compose.yml   # PostgreSQL 15 em container
+└── requirements.txt
 ```
 
 ---
 
-## Como rodar localmente
+<div align="center">
 
-### 1. Pré-requisitos
-- Python 3.10+
-- Docker Desktop instalado e aberto
+*Engenharia de Dados aplicada ao motorsport brasileiro*
+*Dados coletados de fontes públicas — stockcar.com.br / Wikipedia*
 
-### 2. Clonar e instalar dependências
-```bash
-git clone https://github.com/Cavalchi/StockCarKPIs.git
-cd StockCarKPIs
-pip install -r requirements.txt
-```
-
-### 3. Subir o banco de dados
-```bash
-docker-compose up -d
-```
-
-### 4. Executar o pipeline ETL (cria tabelas + carrega dados)
-```bash
-python scraper/load_db.py
-```
-
-### 5. Gerar os gráficos de análise
-```bash
-python dashboard/app.py
-```
-Os 4 gráficos serão salvos em `./output/`.
-
----
-
-## Análises geradas
-
-### 1. Score de Consistência por Piloto
-Mede o desvio padrão das posições finais de cada piloto ao longo de 8 etapas.
-Um desvio padrão baixo significa que o piloto termina consistentemente na mesma região — característica
-valiosíssima para estratégia de campeonato, especialmente em campeonatos de pontos acumulados.
-
-### 2. Janela Ótima de Pit Stop
-Cruza a volta em que cada equipe realizou o pit com o ganho/perda de posição resultante.
-Identifica a faixa de voltas onde a probabilidade de subir posições é estatisticamente maior —
-informação que orienta a decisão do wall engineer.
-
-### 3. ROI Esportivo por Equipe
-Divide os pontos conquistados pelos pontos máximos possíveis (se ganhasse todas as corridas).
-Equipes com dois carros competitivos têm vantagem estrutural nessa métrica, o que ajuda a
-identificar onde há ineficiência estratégica x limitação de equipamento.
-
-### 4. Evolução de Performance por Etapa
-Série temporal da posição de cada piloto etapa a etapa. Revela padrões de desenvolvimento:
-quem melhorou no segundo semestre? Quem sofreu com mudanças de regulamento?
-
----
-
-## Schema do banco de dados
-
-```sql
-corridas    (id, data, circuito, condicoes_pista, temporada)
-    ↓
-resultados  (id, corrida_id, piloto, equipe, posicao, posicao_largada, tempo_total, voltas, temporada)
-pit_stops   (id, corrida_id, piloto, equipe, volta, duracao_s, temporada)
-```
-
----
-
-## Próximos passos
-
-- [ ] Integrar dados de 2022 e 2023 para análise multi-temporada
-- [ ] Dashboard interativo com Streamlit
-- [ ] Modelo preditivo de posição final baseado em ritmo de volta e estratégia de pit
-- [ ] Alerta automático de janela de undercut durante corrida ao vivo
-
----
-
-*Desenvolvido como projeto de portfólio em Engenharia e Análise de Dados.*
-*Dados coletados de fontes públicas (stockcar.com.br / Wikipedia).*
+</div>
