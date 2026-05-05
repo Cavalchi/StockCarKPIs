@@ -1,0 +1,15 @@
+# Arquivos gerados pelo banco local (não precisam ir pro repositório)
+output/*.png
+
+# Ambiente virtual Python
+venv/
+.env
+
+# Arquivos de sistema
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# Estado interno do Docker (não commitar volumes)
+pgdata/
