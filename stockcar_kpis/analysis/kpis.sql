@@ -22,7 +22,7 @@ SELECT
         1
     ) AS score_consistencia
 FROM resultados
-WHERE temporada = 2024
+WHERE temporada = 2024 -- Altere para 2022 ou 2023 para análises de outras temporadas
 GROUP BY piloto, equipe
 HAVING COUNT(*) >= 4
 ORDER BY desvio_padrao_posicao ASC, media_posicao ASC;
@@ -41,7 +41,7 @@ SELECT
     COUNT(*)                             AS total_paradas
 FROM pit_stops p
 JOIN resultados r ON p.corrida_id = r.corrida_id AND p.piloto = r.piloto
-WHERE p.temporada = 2024
+WHERE p.temporada = 2024 -- Altere para 2022 ou 2023
 GROUP BY p.equipe, p.volta
 ORDER BY ganho_medio_posicoes DESC, duracao_media_s ASC;
 
@@ -57,7 +57,7 @@ SELECT
     COUNT(*) AS n
 FROM pit_stops p
 JOIN resultados r ON p.corrida_id = r.corrida_id AND p.piloto = r.piloto
-WHERE p.temporada = 2024
+WHERE p.temporada = 2024 -- Altere para 2022 ou 2023
 GROUP BY faixa_estrategica
 ORDER BY ganho_medio_posicoes DESC;
 
@@ -81,7 +81,7 @@ WITH pontos_sistema AS (
         COUNT(*) * 25    AS pontos_maximos_possiveis,
         COUNT(*)         AS participacoes
     FROM resultados
-    WHERE temporada = 2024
+    WHERE temporada = 2024 -- Altere para 2022 ou 2023
     GROUP BY equipe
 )
 SELECT
@@ -115,7 +115,7 @@ SELECT
 FROM resultados r
 JOIN corridas c ON r.corrida_id = c.id
 LEFT JOIN pit_stops p ON p.corrida_id = r.corrida_id AND p.piloto = r.piloto
-WHERE r.temporada = 2024
+WHERE r.temporada = 2024 -- Altere para 2022 ou 2023
 ORDER BY c.data, r.posicao;
 
 
@@ -134,6 +134,6 @@ SELECT
 FROM resultados r
 LEFT JOIN pit_stops p ON p.corrida_id = r.corrida_id AND p.piloto = r.piloto
 WHERE r.equipe = 'Eurofarma RC'
-  AND r.temporada = 2024
+  AND r.temporada = 2024 -- Altere para 2022 ou 2023
 GROUP BY r.piloto
 ORDER BY media_posicao ASC;

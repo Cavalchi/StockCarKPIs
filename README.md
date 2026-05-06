@@ -4,14 +4,15 @@
 
 **Pipeline de Engenharia de Dados aplicada ao motorsport brasileiro**
 
+[![CI Pipeline](https://github.com/Cavalchi/StockCarKPIs/actions/workflows/ci.yml/badge.svg)](https://github.com/Cavalchi/StockCarKPIs/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.10-3776AB?style=flat-square&logo=python&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)
-![Pandas](https://img.shields.io/badge/Pandas-2.2-150458?style=flat-square&logo=pandas&logoColor=white)
-![Matplotlib](https://img.shields.io/badge/Matplotlib-3.8-white?style=flat-square)
+![Streamlit](https://img.shields.io/badge/Streamlit-App-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
 *Transformando dados brutos da Stock Car Brasil em inteligência competitiva real*
+
+[🇺🇸 Read this in English](README_EN.md)
 
 </div>
 
@@ -34,15 +35,16 @@ Este projeto automatiza a coleta, estrutura em banco relacional e responde essas
 ## Arquitetura
 
 ```
-┌─────────────────────┐      ┌──────────────────────┐      ┌─────────────────────┐
-│   stockcar.com.br   │─────▶│  scraper/scraper.py  │─────▶│  PostgreSQL (Docker)│
-│   (Selenium)        │      │  ETL / load_db.py    │      │  3 tabelas relacionadas│
-└─────────────────────┘      └──────────────────────┘      └──────────┬──────────┘
-                                                                        │
-                                                            ┌───────────▼──────────┐
-                                                            │  dashboard/app.py    │
-                                                            │  4 análises + charts │
-                                                            └──────────────────────┘
+┌───────────────────┐      ┌──────────────────────┐      ┌─────────────────────┐
+│   data/raw/*.csv  │─────▶│  scraper/load_db.py  │─────▶│  PostgreSQL (Docker)│
+│  (3 temporadas)   │      │  Validação + ETL     │      │  3 tabelas relacionadas│
+└───────────────────┘      └──────────────────────┘      └──────────┬──────────┘
+                                                                    │
+                                                        ┌───────────▼──────────┐
+                                                        │  dashboard/app.py    │
+                                                        │  streamlit_app.py    │
+                                                        │  4 análises + charts │
+                                                        └──────────────────────┘
 ```
 
 **Schema do banco:**
@@ -150,6 +152,16 @@ Revela tendências de desenvolvimento de carro, recuperações após problemas m
 
 ---
 
+### 5 — Previsão de Posição Final (Machine Learning)
+
+> *"Dado que eu larguei em P5 pela Ipiranga Racing, onde eu devo terminar?"*
+
+O dashboard conta com um modelo **Random Forest Regressor** treinado com o histórico da Stock Car. Ele faz o *feature engineering* da equipe (One-Hot Encoding) e da posição de largada para prever matematicamente a posição final, informando também o erro médio absoluto (MAE) do modelo.
+
+![Machine Learning](assets/5_machine_learning.png)
+
+---
+
 ## Como rodar
 
 ### Pré-requisitos
@@ -161,18 +173,17 @@ Revela tendências de desenvolvimento de carro, recuperações após problemas m
 git clone https://github.com/Cavalchi/StockCarKPIs.git
 cd StockCarKPIs
 
-# 2. Instalar dependências
-pip install -r requirements.txt
+# 2. Configurar variáveis de ambiente
+cp .env.example .env          # edite se necessário (credenciais, porta, etc.)
 
-# 3. Subir o banco (PostgreSQL no Docker)
-docker-compose up -d
+# 3. Rodar tudo com o Makefile (Instala dependências, sobe DB, roda ETL e abre Dashboard)
+make all
 
-# 4. Executar o pipeline ETL
-python scraper/load_db.py
-
-# 5. Gerar os 4 gráficos
-python dashboard/app.py
-# → Salvo em ./output/
+# --- Ou rodar os comandos individualmente ---
+# make setup       (instala requirements e sobe o docker)
+# make etl         (roda o pipeline de dados)
+# make dashboard   (abre o streamlit)
+# make test        (roda os testes automatizados)
 ```
 
 ---
@@ -181,18 +192,27 @@ python dashboard/app.py
 
 ```
 StockCarKPIs/
-├── scraper/
-│   ├── scraper.py       # Selenium: coleta real do site oficial
-│   └── load_db.py       # ETL: schema + 8 etapas 2024 (80 resultados, 80 pit stops)
-├── analysis/
-│   └── kpis.sql         # SQL das 4 análises + bônus Eurofarma RC
-├── dashboard/
-│   └── app.py           # Geração dos 4 gráficos (matplotlib, seaborn)
-├── assets/              # Charts para o README
+├── data/
+│   └── raw/                 # CSVs por temporada (fonte dos dados 2022-2024)
+├── stockcar_kpis/           # Pacote principal
+│   ├── __init__.py
+│   ├── config.py            # Configuração centralizada (DB, cores, constantes)
+│   ├── etl/
+│   │   ├── scraper.py       # Selenium: coleta do site oficial
+│   │   └── load_db.py       # ETL: CSV → Validação → PostgreSQL
+│   ├── analysis/
+│   │   └── kpis.sql         # SQL das 4 análises + bônus
+│   └── dashboard/
+│       ├── app.py           # Gráficos estáticos (Matplotlib + Seaborn)
+│       └── streamlit_app.py # Dashboard interativo (Streamlit + Plotly)
+├── tests/
+│   └── test_etl.py          # Testes unitários de validação (pytest)
 ├── db/
-│   └── schema.sql       # Schema de referência
-├── docker-compose.yml   # PostgreSQL 15 em container
-└── requirements.txt
+│   └── schema.sql           # Schema do banco (fonte única de verdade)
+├── .env.example             # Template de variáveis de ambiente
+├── Makefile                 # Automação de comandos (setup, etl, test, etc.)
+├── docker-compose.yml       # PostgreSQL 15 em container
+└── requirements.txt         # Dependências do projeto
 ```
 
 ---

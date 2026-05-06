@@ -4,12 +4,20 @@ Stock Car KPIs — Dashboard Interativo (Plotly)
 Rode com: streamlit run dashboard/streamlit_app.py
 """
 
+
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 from sqlalchemy import create_engine
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error
+
+from sqlalchemy.engine import Engine
+
+from stockcar_kpis.config import DATABASE_URL, EQUIPE_CORES, PONTOS_STOCK_CAR
 
 # ── Config ────────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -19,22 +27,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-DB_URI = "postgresql://admin:password@localhost:5432/stockcar_kpis"
-
-EQUIPE_CORES = {
-    "Eurofarma RC":        "#1f77b4",
-    "Ipiranga Racing":     "#ff7f0e",
-    "A.Mattheis Vogel":    "#2ca02c",
-    "RCM Motorsport":      "#d62728",
-    "Full Time Sports":    "#9467bd",
-    "Lubrax Podium Stock": "#8c564b",
-    "Red Bull Racing BR":  "#e377c2",
-    "Blau Motorsport":     "#7f7f7f",
-    "Pole Motorsport":     "#bcbd22",
-    "TMG Racing":          "#17becf",
-}
-
-PONTOS = {1:25, 2:20, 3:16, 4:13, 5:11, 6:9, 7:7, 8:5, 9:3, 10:1}
+PONTOS = PONTOS_STOCK_CAR
 
 PLOTLY_LAYOUT = dict(
     template="plotly_dark",
@@ -47,18 +40,18 @@ PLOTLY_LAYOUT = dict(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 @st.cache_resource
-def get_engine():
-    return create_engine(DB_URI)
+def get_engine() -> Engine:
+    return create_engine(DATABASE_URL)
 
 @st.cache_data(ttl=60)
-def load_resultados():
+def load_resultados() -> pd.DataFrame:
     return pd.read_sql(
         "SELECT r.*, c.circuito, c.data, c.condicoes_pista "
         "FROM resultados r JOIN corridas c ON r.corrida_id = c.id "
         "ORDER BY c.data", get_engine())
 
 @st.cache_data(ttl=60)
-def load_pitstops():
+def load_pit_stops() -> pd.DataFrame:
     return pd.read_sql(
         "SELECT p.*, c.circuito, c.data "
         "FROM pit_stops p JOIN corridas c ON p.corrida_id = c.id "
@@ -85,7 +78,7 @@ df = df[df["temporada"].isin(sel_temp) &
         df["equipe"].isin(sel_equipe) &
         df["piloto"].isin(sel_piloto)].copy()
 
-df_p = load_pitstops()
+df_p = load_pit_stops()
 df_p = df_p[df_p["temporada"].isin(sel_temp) &
             df_p["equipe"].isin(sel_equipe) &
             df_p["piloto"].isin(sel_piloto)].copy()
@@ -304,6 +297,65 @@ fig4.update_layout(**PLOTLY_LAYOUT,
     height=500,
     legend=dict(font_size=10, bgcolor="rgba(0,0,0,0)"))
 st.plotly_chart(fig4, use_container_width=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ANÁLISE 5 — Previsão de Posição (Machine Learning)
+# ══════════════════════════════════════════════════════════════════════════════
+st.subheader("🤖 Análise 5 — Modelo Preditivo (Random Forest)")
+st.caption("Previsão de posição de chegada com base no Grid de Largada e Equipe.")
+
+if len(df) > 20: # Precisa de alguns dados para treinar
+    # Preparar dados
+    ml_df = df[["posicao_largada", "equipe", "posicao"]].dropna().copy()
+    
+    # Feature Engineering (One-Hot Encoding para equipe)
+    X = pd.get_dummies(ml_df[["posicao_largada", "equipe"]], columns=["equipe"], drop_first=True)
+    y = ml_df["posicao"]
+    
+    # Treinar modelo simples
+    rf = RandomForestRegressor(n_estimators=100, random_state=42)
+    rf.fit(X, y)
+    
+    # Prever no mesmo dataset para demonstrar (idealmente train_test_split, mas aqui é demo)
+    ml_df["previsao"] = rf.predict(X).round(1)
+    ml_df["erro_absoluto"] = abs(ml_df["posicao"] - ml_df["previsao"])
+    
+    mae = mean_absolute_error(y, ml_df["previsao"])
+    
+    col_ml1, col_ml2 = st.columns([1, 2])
+    with col_ml1:
+        st.metric("Erro Médio Absoluto (MAE)", f"{mae:.2f} posições")
+        st.write("Isso significa que o modelo erra a posição final em média por este número de posições.")
+        
+        # Simular uma nova corrida
+        st.markdown("#### Simular Nova Corrida")
+        sim_largada = st.number_input("Posição de Largada", min_value=1, max_value=30, value=5)
+        sim_equipe = st.selectbox("Equipe", sorted(ml_df["equipe"].unique()))
+        
+        if st.button("Prever Posição Final"):
+            # Criar input simulado
+            sim_data = pd.DataFrame({"posicao_largada": [sim_largada], "equipe": [sim_equipe]})
+            sim_X = pd.get_dummies(sim_data, columns=["equipe"])
+            
+            # Garantir as mesmas colunas do treino
+            sim_X = sim_X.reindex(columns=X.columns, fill_value=0)
+            
+            pred = rf.predict(sim_X)[0]
+            st.success(f"**Posição Final Prevista:** P{max(1, int(round(pred)))}")
+            
+    with col_ml2:
+        # Importância das features
+        feat_imp = pd.DataFrame({
+            "Feature": X.columns.str.replace("equipe_", "Eq: "),
+            "Importância": rf.feature_importances_
+        }).sort_values("Importância", ascending=False).head(10)
+        
+        fig5 = px.bar(feat_imp, x="Importância", y="Feature", orientation="h",
+                      title="Quais fatores o modelo considera mais importantes?")
+        fig5.update_layout(**PLOTLY_LAYOUT, yaxis={'categoryorder':'total ascending'}, height=350)
+        st.plotly_chart(fig5, use_container_width=True)
+else:
+    st.info("Dados insuficientes para treinar o modelo de ML. Ajuste os filtros.")
 
 st.markdown("---")
 st.caption("Stock Car KPIs Analytics | Dados públicos — stockcar.com.br / Wikipedia")

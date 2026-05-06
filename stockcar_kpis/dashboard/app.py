@@ -9,7 +9,11 @@ Analises implementadas:
   4. Evolucao de performance por etapa (multi-corrida)
 """
 
+
+
 import os
+import logging
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -17,39 +21,30 @@ import matplotlib.patches as mpatches
 import seaborn as sns
 from sqlalchemy import create_engine
 
-DB_URI = "postgresql://admin:password@localhost:5432/stockcar_kpis"
+from sqlalchemy.engine import Engine
 
-OUTPUT_DIR = "output"
+from stockcar_kpis.config import DATABASE_URL, OUTPUT_DIR, EQUIPE_CORES, PONTOS_STOCK_CAR
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger(__name__)
+
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Paleta de cores por equipe (consistente em todos os graficos)
-EQUIPE_CORES = {
-    "Eurofarma RC":          "#1f77b4",
-    "Ipiranga Racing":       "#ff7f0e",
-    "A.Mattheis Vogel":      "#2ca02c",
-    "RCM Motorsport":        "#d62728",
-    "Full Time Sports":      "#9467bd",
-    "Lubrax Podium Stock":   "#8c564b",
-    "Red Bull Racing BR":    "#e377c2",
-    "Blau Motorsport":       "#7f7f7f",
-    "Pole Motorsport":       "#bcbd22",
-    "TMG Racing":            "#17becf",
-}
 
-# Sistema de pontos Stock Car (top 10)
-PONTOS_STOCK_CAR = {1:25, 2:20, 3:16, 4:13, 5:11, 6:9, 7:7, 8:5, 9:3, 10:1}
-
-
-def get_engine():
-    return create_engine(DB_URI)
-
+def get_engine() -> Engine:
+    return create_engine(DATABASE_URL)
 
 # ===========================================================================
 # ANALISE 1: SCORE DE CONSISTENCIA POR PILOTO
 # KPI: Desvio padrao das posicoes ao longo da temporada
 # Insight: Piloto consistente = baixo STDDEV. Mais valioso para estrategia.
 # ===========================================================================
-def plot_consistencia():
+def plot_consistencia() -> None:
+    """Gera gráfico de consistência de pilotos por desvio padrão."""
     engine = get_engine()
     query = """
         SELECT
@@ -118,7 +113,8 @@ def plot_consistencia():
 # KPI: Relacao entre a volta do pit e o ganho/perda de posicao
 # Insight: Equipes que pitam nas voltas 13-15 ganham +2.1 posicoes em media
 # ===========================================================================
-def plot_janela_pit():
+def plot_janela_pit() -> None:
+    """Gera gráfico de relação entre volta do pit stop e ganho de posições."""
     engine = get_engine()
 
     # Pit + posicao largada + posicao final na mesma corrida
@@ -163,10 +159,9 @@ def plot_janela_pit():
                    color=cor, alpha=0.75, s=55, label=equipe, zorder=3)
 
     # Linha de tendencia geral
-    z = pd.np if hasattr(pd, "np") else __import__("numpy")
-    coef = z.polyfit(df["volta_pit"], df["ganho_posicoes"], 1)
-    poly = z.poly1d(coef)
-    xseq = z.linspace(df["volta_pit"].min(), df["volta_pit"].max(), 100)
+    coef = np.polyfit(df["volta_pit"], df["ganho_posicoes"], 1)
+    poly = np.poly1d(coef)
+    xseq = np.linspace(df["volta_pit"].min(), df["volta_pit"].max(), 100)
     ax.plot(xseq, poly(xseq), color="#ff4444", linewidth=1.5,
             linestyle="--", label="Tendencia geral", zorder=4)
 
@@ -224,7 +219,8 @@ def plot_janela_pit():
 # Insight: Equipe que sempre fica em P4-P5 mas tem dois carros pode ter
 #          ROI coletivo maior que equipe que tem um vencedor e um retardatario
 # ===========================================================================
-def plot_roi_esportivo():
+def plot_roi_esportivo() -> None:
+    """Gera gráfico de ROI esportivo por equipe."""
     engine = get_engine()
     query = """
         SELECT equipe, posicao
@@ -295,7 +291,8 @@ def plot_roi_esportivo():
 # KPI: Posicao de cada piloto etapa a etapa ao longo da temporada
 # Insight: Quem melhorou? Quem caiu? Tendencia de desenvolvimento do carro.
 # ===========================================================================
-def plot_evolucao_temporada():
+def plot_evolucao_temporada() -> None:
+    """Gera gráfico de evolução de posições ao longo da temporada."""
     engine = get_engine()
     query = """
         SELECT
@@ -375,16 +372,15 @@ def plot_evolucao_temporada():
 # MAIN
 # ===========================================================================
 if __name__ == "__main__":
-    import numpy  # garante que numpy esta disponivel para o plot 2
-    print("=" * 55)
-    print("   STOCK CAR KPIs — Gerando 4 Analises...")
-    print("=" * 55)
+    logger.info("=" * 55)
+    logger.info("   STOCK CAR KPIs — Gerando 4 Analises...")
+    logger.info("=" * 55)
     plot_consistencia()
     plot_janela_pit()
     plot_roi_esportivo()
     plot_evolucao_temporada()
-    print("\nPronto! Graficos salvos em: ./output/")
-    print("  1_consistencia_pilotos.png")
-    print("  2_janela_pit_stop.png")
-    print("  3_roi_esportivo_equipes.png")
-    print("  4_evolucao_temporada.png")
+    logger.info("Pronto! Graficos salvos em: ./output/")
+    logger.info("  1_consistencia_pilotos.png")
+    logger.info("  2_janela_pit_stop.png")
+    logger.info("  3_roi_esportivo_equipes.png")
+    logger.info("  4_evolucao_temporada.png")
