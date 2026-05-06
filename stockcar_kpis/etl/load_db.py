@@ -21,7 +21,7 @@ from typing import Dict, Tuple
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from stockcar_kpis.config import DATABASE_URL, SCHEMA_PATH, PROJECT_ROOT, DATA_DIR
+from stockcar_kpis.config import DATABASE_URL, SCHEMA_PATH, DATA_DIR
 
 logging.basicConfig(
     level=logging.INFO,

@@ -18,7 +18,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib.patches as mpatches
-import seaborn as sns
 from sqlalchemy import create_engine
 
 from sqlalchemy.engine import Engine
@@ -315,8 +314,6 @@ def plot_evolucao_temporada() -> None:
     df["circuito_abrev"] = (df["circuito"]
                             .str.replace("Autodromo de ", "", regex=False)
                             .str.replace("Autodromo ", "", regex=False))
-
-    etapas = df["circuito_abrev"].unique()
 
     # Foco nos top 6 pilotos mais presentes
     top_pilotos = (df.groupby("piloto")["posicao"]

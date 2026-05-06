@@ -4,7 +4,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import time
 
 def scrape_race_results():
     """
@@ -57,9 +56,11 @@ def scrape_race_results():
             return df
             
     except Exception as e:
-        print(f"Aviso: Site oficial bloqueou a extração ou estrutura mudou. Detalhe: {e}")
-        print("Usando Dataset Oficial da Temporada 2024 para prosseguir com a pipeline de Engenharia de Dados...")
-        
+        print(f"Aviso: Site oficial bloqueou a extração ou estrutura mudou. "
+              f"Detalhe: {e}")
+        print("Usando Dataset Oficial da Temporada 2024 para prosseguir com "
+              "a pipeline de Engenharia de Dados...")
+
     finally:
         driver.quit()
         
