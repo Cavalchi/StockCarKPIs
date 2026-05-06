@@ -36,7 +36,7 @@ Este projeto automatiza a coleta, estrutura em banco relacional e responde essas
 
 ```
 ┌───────────────────┐      ┌──────────────────────┐      ┌─────────────────────┐
-│   data/raw/*.csv  │─────▶│  scraper/load_db.py  │─────▶│  PostgreSQL (Docker)│
+│   data/raw/*.csv  │─────▶│  scraper/load_db.py  │─────│  PostgreSQL (Docker)│
 │  (3 temporadas)   │      │  Validação + ETL     │      │  3 tabelas relacionadas│
 └───────────────────┘      └──────────────────────┘      └──────────┬──────────┘
                                                                     │

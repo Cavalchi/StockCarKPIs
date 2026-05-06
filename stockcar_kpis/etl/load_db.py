@@ -21,7 +21,7 @@ from typing import Dict, Tuple
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from stockcar_kpis.config import DATABASE_URL, SCHEMA_PATH, DATA_DIR
+from stockcar_kpis.config import DATABASE_URL, SCHEMA_PATH, DATA_DIR, USE_SQLITE
 
 logging.basicConfig(
     level=logging.INFO,
@@ -189,18 +189,34 @@ def inserir_temporada(engine, temporada: int,
         etapa_para_id = {}
 
         for idx, row in df_corridas.iterrows():
-            res = conn.execute(text("""
-                INSERT INTO corridas (data, circuito, condicoes_pista, temporada)
-                VALUES (:data, :circuito, :condicoes, :temporada)
-                RETURNING id
-            """), {
-                "data": row["data"],
-                "circuito": row["circuito"],
-                "condicoes": row["condicoes_pista"],
-                "temporada": temporada,
-            })
-            corrida_id = res.fetchone()[0]
-            etapa_para_id[idx + 1] = corrida_id  # etapas são 1-indexed
+            if USE_SQLITE:
+                conn.execute(text("""
+                    INSERT INTO corridas
+                        (data, circuito, condicoes_pista, temporada)
+                    VALUES (:data, :circuito, :condicoes, :temporada)
+                """), {
+                    "data": row["data"],
+                    "circuito": row["circuito"],
+                    "condicoes": row["condicoes_pista"],
+                    "temporada": temporada,
+                })
+                corrida_id = conn.execute(
+                    text("SELECT last_insert_rowid()")
+                ).fetchone()[0]
+            else:
+                res = conn.execute(text("""
+                    INSERT INTO corridas
+                        (data, circuito, condicoes_pista, temporada)
+                    VALUES (:data, :circuito, :condicoes, :temporada)
+                    RETURNING id
+                """), {
+                    "data": row["data"],
+                    "circuito": row["circuito"],
+                    "condicoes": row["condicoes_pista"],
+                    "temporada": temporada,
+                })
+                corrida_id = res.fetchone()[0]
+            etapa_para_id[idx + 1] = corrida_id
             contadores["corridas"] += 1
 
         # Insere resultados
@@ -271,8 +287,26 @@ def main() -> None:
     # 2. Limpa e recria schema
     reset_db(engine)
     schema_sql = SCHEMA_PATH.read_text(encoding="utf-8")
+    if USE_SQLITE:
+        # SQLite: substitui SERIAL por INTEGER PRIMARY KEY AUTOINCREMENT
+        schema_sql = schema_sql.replace(
+            "SERIAL PRIMARY KEY",
+            "INTEGER PRIMARY KEY AUTOINCREMENT"
+        )
+        schema_sql = schema_sql.replace("NUMERIC(5, 2)", "REAL")
+        schema_sql = schema_sql.replace("VARCHAR(100)", "TEXT")
+        schema_sql = schema_sql.replace("VARCHAR(50)", "TEXT")
+        schema_sql = schema_sql.replace("DATE", "TEXT")
     with engine.begin() as conn:
-        conn.execute(text(schema_sql))
+        # Remove linhas de comentário antes de dividir por ;
+        lines = schema_sql.splitlines()
+        clean = "\n".join(
+            l for l in lines if not l.strip().startswith("--")
+        )
+        for stmt in clean.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                conn.execute(text(stmt))
     logger.info(f"Schema criado ({SCHEMA_PATH.name}).")
 
     # 3. Processa cada temporada
