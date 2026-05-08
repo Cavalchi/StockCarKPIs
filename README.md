@@ -20,7 +20,7 @@
 
 ## O Problema
 
-O site oficial da Stock Car publica tabelas de resultados corrida a corrida — posições finais, pit stops, grid de largada. Dados brutos.
+O site oficial da Stock Car publica tabelas de resultados corrida a corrida — posições finais, pit stops, grid de largada. Dados brutos. Para dar escala ao projeto, utilizamos **dados de 3 temporadas da Stock Car Brasil (2022–2024), 18 etapas por temporada, 34 pilotos**.
 
 **O que nenhum analista da equipe consegue ver facilmente nesses dados:**
 - Qual piloto é *estatisticamente* mais consistente ao longo da temporada?

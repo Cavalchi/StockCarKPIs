@@ -1,9 +1,11 @@
 # Arquivos gerados pelo banco local (não precisam ir pro repositório)
 output/*.png
+*.db
 
 # Ambiente virtual Python
 venv/
 .env
+*.egg-info/
 
 # Arquivos de sistema
 __pycache__/

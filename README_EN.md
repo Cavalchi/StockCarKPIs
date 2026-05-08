@@ -20,7 +20,7 @@
 
 ## The Problem
 
-The official Stock Car website publishes race-by-race result tables — final positions, pit stops, starting grids. Just raw data.
+The official Stock Car website publishes race-by-race result tables — final positions, pit stops, starting grids. Just raw data. To give scale to this project, we used **data from 3 seasons of Stock Car Brasil (2022–2024), 18 rounds per season, 34 drivers**.
 
 **What no team analyst can easily see in this data:**
 - Which driver is *statistically* more consistent throughout the season?
